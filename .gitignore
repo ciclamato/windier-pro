@@ -3,6 +3,7 @@
 # Windows/.NET build output
 Windows/**/bin/
 Windows/**/obj/
+Windows/PalmierPro.Media/build/
 .swiftpm/
 .build/
 .vscode/

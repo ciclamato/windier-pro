@@ -3,18 +3,55 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
   <Application.Resources>
-    <SolidColorBrush x:Key="WindowBrush" Color="#101216" />
-    <SolidColorBrush x:Key="PanelBrush" Color="#181B21" />
-    <SolidColorBrush x:Key="PanelBorderBrush" Color="#2A2F38" />
-    <SolidColorBrush x:Key="TextBrush" Color="#F2F4F8" />
-    <SolidColorBrush x:Key="MutedTextBrush" Color="#9CA5B4" />
+    <SolidColorBrush x:Key="WindowBrush" Color="#F0EEE7" />
+    <SolidColorBrush x:Key="PanelBrush" Color="#F8F7F2" />
+    <SolidColorBrush x:Key="PanelBrushTranslucent" Color="#E6F8F7F2" />
+    <SolidColorBrush x:Key="PanelBorderBrush" Color="#28151412" />
+    <SolidColorBrush x:Key="TextBrush" Color="#161513" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#77736B" />
+    <SolidColorBrush x:Key="FaintTextBrush" Color="#A7A39B" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#7770C9" />
+    <SolidColorBrush x:Key="AccentWashBrush" Color="#E8E5F4" />
+    <SolidColorBrush x:Key="InkBrush" Color="#171717" />
+    <SolidColorBrush x:Key="InkMutedBrush" Color="#262522" />
+    <LinearGradientBrush x:Key="WindowGradient" StartPoint="0,0" EndPoint="1,1">
+      <GradientStop Color="#F3F1EA" Offset="0" />
+      <GradientStop Color="#E9E7E0" Offset="0.58" />
+      <GradientStop Color="#E4E1EA" Offset="1" />
+    </LinearGradientBrush>
+    <RadialGradientBrush x:Key="PreviewGradient" Center="0.58,0.15" RadiusX="0.9" RadiusY="0.95">
+      <GradientStop Color="#474451" Offset="0" />
+      <GradientStop Color="#1B1A1D" Offset="0.55" />
+      <GradientStop Color="#101010" Offset="1" />
+    </RadialGradientBrush>
     <Style TargetType="Button">
       <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-      <Setter Property="Background" Value="#252A33" />
+      <Setter Property="Background" Value="#DCF8F7F2" />
       <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}" />
-      <Setter Property="Padding" Value="14,8" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="13,8" />
       <Setter Property="Margin" Value="0,0,8,0" />
+      <Setter Property="FontFamily" Value="Segoe UI Variable Text" />
+      <Setter Property="FontSize" Value="12" />
       <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="5" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="{StaticResource AccentWashBrush}" />
+          <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        </Trigger>
+        <Trigger Property="IsPressed" Value="True">
+          <Setter Property="Opacity" Value="0.78" />
+        </Trigger>
+      </Style.Triggers>
     </Style>
   </Application.Resources>
 </Application>

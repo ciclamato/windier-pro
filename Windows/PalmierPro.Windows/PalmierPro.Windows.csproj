@@ -11,4 +11,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PalmierPro.Core\PalmierPro.Core.csproj" />
+  </ItemGroup>
 </Project>

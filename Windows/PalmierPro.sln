@@ -1,0 +1,39 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PalmierPro.Core", "PalmierPro.Core\PalmierPro.Core.csproj", "{A7E42A87-4A31-4BA7-9F3A-26AA7BC44801}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PalmierPro.Core.Tests", "PalmierPro.Core.Tests\PalmierPro.Core.Tests.csproj", "{C2AC7E48-15D4-4E0C-8D42-5D62E4C8A709}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PalmierPro.WinUI", "PalmierPro.WinUI\PalmierPro.WinUI.csproj", "{B6E4D4AB-4E50-4935-9A92-2DC07E2BC62C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PalmierPro.Windows", "PalmierPro.Windows\PalmierPro.Windows.csproj", "{F91A4F33-4B40-4B14-8B96-3D1AC5D1C7E7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A7E42A87-4A31-4BA7-9F3A-26AA7BC44801}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A7E42A87-4A31-4BA7-9F3A-26AA7BC44801}.Debug|x64.Build.0 = Debug|Any CPU
+		{A7E42A87-4A31-4BA7-9F3A-26AA7BC44801}.Release|x64.ActiveCfg = Release|Any CPU
+		{A7E42A87-4A31-4BA7-9F3A-26AA7BC44801}.Release|x64.Build.0 = Release|Any CPU
+		{C2AC7E48-15D4-4E0C-8D42-5D62E4C8A709}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C2AC7E48-15D4-4E0C-8D42-5D62E4C8A709}.Debug|x64.Build.0 = Debug|Any CPU
+		{C2AC7E48-15D4-4E0C-8D42-5D62E4C8A709}.Release|x64.ActiveCfg = Release|Any CPU
+		{C2AC7E48-15D4-4E0C-8D42-5D62E4C8A709}.Release|x64.Build.0 = Release|Any CPU
+		{B6E4D4AB-4E50-4935-9A92-2DC07E2BC62C}.Debug|x64.ActiveCfg = Debug|x64
+		{B6E4D4AB-4E50-4935-9A92-2DC07E2BC62C}.Debug|x64.Build.0 = Debug|x64
+		{B6E4D4AB-4E50-4935-9A92-2DC07E2BC62C}.Release|x64.ActiveCfg = Release|x64
+		{B6E4D4AB-4E50-4935-9A92-2DC07E2BC62C}.Release|x64.Build.0 = Release|x64
+		{F91A4F33-4B40-4B14-8B96-3D1AC5D1C7E7}.Debug|x64.ActiveCfg = Debug|x64
+		{F91A4F33-4B40-4B14-8B96-3D1AC5D1C7E7}.Debug|x64.Build.0 = Debug|x64
+		{F91A4F33-4B40-4B14-8B96-3D1AC5D1C7E7}.Release|x64.ActiveCfg = Release|x64
+		{F91A4F33-4B40-4B14-8B96-3D1AC5D1C7E7}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
