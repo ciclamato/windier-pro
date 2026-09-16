@@ -10,6 +10,7 @@ using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Streams;
+using Windows.System;
 using WinRT.Interop;
 using PalmierPro.Core.Editing;
 using PalmierPro.Core.Automation;
@@ -20,6 +21,7 @@ using PalmierPro.Core.Export;
 using PalmierPro.WinUI.AI;
 using PalmierPro.WinUI.Audio;
 using PalmierPro.WinUI.Playback;
+using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
 namespace PalmierPro.WinUI;
 
@@ -44,11 +46,12 @@ public sealed partial class MainWindow : Window
     private ClipDragState? _drag;
     private int _playheadFrame;
     private Border? _playheadElement;
+    private readonly List<MediaItem> _mediaCatalog = [];
 
     public MainWindow()
     {
         InitializeComponent();
-        _playbackTimer = (DispatcherQueue.GetForCurrentThread() ?? throw new InvalidOperationException("The editor must start on the Windows UI thread.")).CreateTimer();
+        _playbackTimer = (Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread() ?? throw new InvalidOperationException("The editor must start on the Windows UI thread.")).CreateTimer();
         _playbackTimer.Interval = TimeSpan.FromMilliseconds(50);
         _playbackTimer.Tick += PlaybackTimer_Tick;
         RefreshFromDocument();
@@ -57,6 +60,8 @@ public sealed partial class MainWindow : Window
     }
 
     public ObservableCollection<MediaItem> MediaItems { get; } = [];
+
+    private void MediaSearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyMediaFilter();
 
     private async void Import_Click(object sender, RoutedEventArgs e)
     {
@@ -258,12 +263,14 @@ public sealed partial class MainWindow : Window
 
     private void RefreshFromDocument()
     {
+        _mediaCatalog.Clear();
         MediaItems.Clear();
         var timeline = _document.Project.Timelines.FirstOrDefault();
         if (timeline is null) return;
         foreach (var entry in _document.Manifest.Entries)
         {
-            var clip = timeline.Tracks.SelectMany(track => track.Clips).FirstOrDefault(item => item.MediaRef == entry.Id);
+            var relatedClips = timeline.Tracks.SelectMany(track => track.Clips).Where(item => item.MediaRef == entry.Id).ToArray();
+            var clip = relatedClips.FirstOrDefault();
             if (clip is null) continue;
             var path = entry.Source switch
             {
@@ -271,14 +278,29 @@ public sealed partial class MainWindow : Window
                 MediaSource.Project project => Path.GetFullPath(Path.Combine(_projectPath ?? string.Empty, project.RelativePath)),
                 _ => string.Empty
             };
-            MediaItems.Add(new MediaItem(entry.Id, clip.Id, entry.Name, path, entry.Type, entry.Duration, entry.SourceWidth, entry.SourceHeight));
+            var textContent = string.Join(Environment.NewLine, relatedClips.Select(item => item.TextContent).Where(text => !string.IsNullOrWhiteSpace(text)));
+            _mediaCatalog.Add(new MediaItem(entry.Id, clip.Id, entry.Name, path, entry.Type, entry.Duration, entry.SourceWidth, entry.SourceHeight, textContent));
         }
-        ClipSummary.Text = MediaItems.Count == 0 ? "No clips" : $"{MediaItems.Count} clip{(MediaItems.Count == 1 ? "" : "s")}";
+        ClipSummary.Text = _mediaCatalog.Count == 0 ? "No clips" : $"{_mediaCatalog.Count} clip{(_mediaCatalog.Count == 1 ? "" : "s")}";
+        ApplyMediaFilter();
         if (_selectedClipId is not null && !timeline.Tracks.SelectMany(track => track.Clips).Any(clip => clip.Id == _selectedClipId))
             _selectedClipId = null;
         _playheadFrame = Math.Clamp(_playheadFrame, 0, Math.Max(0, timeline.DisplayFrames));
         RefreshInspector();
         RefreshTimeline();
+    }
+
+    private void ApplyMediaFilter()
+    {
+        var query = MediaSearchBox?.Text?.Trim();
+        IEnumerable<MediaItem> filtered = string.IsNullOrWhiteSpace(query)
+            ? _mediaCatalog
+            : _mediaCatalog.Where(item => item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || item.TextContent?.Contains(query, StringComparison.OrdinalIgnoreCase) == true).ToArray();
+        MediaItems.Clear();
+        foreach (var item in filtered) MediaItems.Add(item);
+        if (_mediaCatalog.Count > 0 && !string.IsNullOrWhiteSpace(query))
+            ClipSummary.Text = $"{MediaItems.Count} of {_mediaCatalog.Count} clips";
     }
 
     private void RefreshInspector()
@@ -615,6 +637,25 @@ public sealed partial class MainWindow : Window
         }
         if (_playbackClock.IsRunning) PausePlayback();
         else StartPlayback();
+    }
+
+    private void Editor_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case VirtualKey.Space:
+                PlayPause_Click(sender, e);
+                e.Handled = true;
+                break;
+            case VirtualKey.Delete:
+                RippleDelete_Click(sender, e);
+                e.Handled = true;
+                break;
+            case VirtualKey.S when !e.KeyStatus.IsMenuKeyDown:
+                SplitSelected_Click(sender, e);
+                e.Handled = true;
+                break;
+        }
     }
 
     private void StartPlayback()
@@ -1013,7 +1054,7 @@ public sealed partial class MainWindow : Window
 
 public sealed class MediaItem
 {
-    public MediaItem(string assetId, string clipId, string name, string path, ClipType type, double duration, int? width, int? height)
+    public MediaItem(string assetId, string clipId, string name, string path, ClipType type, double duration, int? width, int? height, string? textContent = null)
     {
         AssetId = assetId;
         ClipId = clipId;
@@ -1023,6 +1064,7 @@ public sealed class MediaItem
         Duration = duration;
         Width = width;
         Height = height;
+        TextContent = textContent;
     }
 
     public string AssetId { get; set; }
@@ -1033,5 +1075,6 @@ public sealed class MediaItem
     public double Duration { get; set; }
     public int? Width { get; set; }
     public int? Height { get; set; }
+    public string? TextContent { get; set; }
     public string DurationLabel => Duration <= 0 ? "duration unknown" : TimeSpan.FromSeconds(Duration).ToString(Duration >= 3600 ? @"h\:mm\:ss" : @"m\:ss");
 }
