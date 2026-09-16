@@ -51,6 +51,9 @@ cmake --build Windows/PalmierPro.Media/build --config Release
   browser `Origin` header are rejected.
 - API keys are kept in Windows Credential Manager. Codex credentials remain owned by Codex;
   the app talks to its local `codex app-server` over documented stdio JSON-RPC.
+- Audio output can be selected at runtime from WASAPI shared, WASAPI exclusive, or installed
+  ASIO drivers. ASIO4ALL is detected when its own driver is already installed; it is never
+  bundled by Palmier.
 
 ## Compatibility boundary
 

@@ -15,7 +15,7 @@ source behavior is inventoried and has an explicit implementation boundary.
 | Editor state | `PalmierPro.Core`, UI-independent | working | Core tests pass without UI |
 | Media ABI | CMake C++ library with optional FFmpeg linkage | bootstrap | Probe/decode fixture through the ABI |
 | Preview | FFmpeg frame capture; D3D/HLSL boundary defined | bootstrap | Frame comparison against reference |
-| Audio clock | Shared clock contract; WASAPI adapter boundary | bootstrap | A/V drift stays within one frame |
+| Audio clock | Shared clock plus WASAPI shared/exclusive and installed ASIO driver selection | bootstrap | A/V drift stays within one frame |
 | Local ML | On-demand checksum store and ONNX model boundary | bootstrap | Beat and SigLIP parity thresholds |
 | Packaging | Self-contained WinUI x64 output and installer boundary | planned | Clean-machine install/uninstall |
 
@@ -42,7 +42,7 @@ source behavior is inventoried and has an explicit implementation boundary.
 | --- | --- | --- |
 | Probe, thumbnails, filmstrips, waveforms | bootstrap | FFmpeg/native media adapters |
 | Preview/export render graph | bootstrap | D3D11 + HLSL shared graph |
-| Video/audio mixing | planned | Native FFmpeg + WASAPI |
+| Video/audio mixing | bootstrap | Native FFmpeg + selected WASAPI/ASIO output |
 | H.264 and ProRes export profiles | bootstrap | FFmpeg export preflight/queue |
 | XML/FCPXML | planned | C# exporter using immutable snapshot |
 | Beat This and SigLIP 2 | bootstrap | ONNX Runtime conversion and parity checks |

@@ -24,6 +24,8 @@
         <TextBlock x:Name="ProjectStatus" Text="UNTITLED PROJECT" Foreground="{StaticResource FaintBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
         <Button Content="Open" Click="OpenProject_Click" />
         <Button Content="Save" Click="SaveProject_Click" />
+        <Button Content="Audio" Click="ConfigureAudio_Click" />
+        <Button Content="Split" Click="SplitSelected_Click" />
         <Button Content="Undo" Click="Undo_Click">
           <Button.KeyboardAccelerators><KeyboardAccelerator Key="Z" Modifiers="Control" /></Button.KeyboardAccelerators>
         </Button>
@@ -101,27 +103,12 @@
       <StackPanel>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
           <TextBlock Text="TIMELINE" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
-          <TextBlock Text="  /  00:00:00:00" FontSize="10" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" />
-          <TextBlock Text="  /  30 FPS" FontSize="10" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" />
+          <TextBlock x:Name="TimelineReadout" Text="  /  00:00:00:00" FontSize="10" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" />
+          <TextBlock x:Name="TimelineFps" Text="  /  30 FPS" FontSize="10" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" />
         </StackPanel>
-        <Border Height="58" Background="#66FDFCF8" BorderBrush="#17151314" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,0,0,7">
-          <StackPanel Orientation="Horizontal">
-            <Border Width="30" Height="30" CornerRadius="6" Background="{StaticResource InkBrush}" Margin="0,0,10,0">
-              <TextBlock Text="V1" Foreground="{StaticResource SurfaceBrush}" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
-            <TextBlock Text="Video track" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
-            <TextBlock Text="Import order becomes your first sequence." Foreground="{StaticResource FaintBrush}" VerticalAlignment="Center" Margin="24,0,0,0" />
-          </StackPanel>
-        </Border>
-        <Border Height="58" Background="#66FDFCF8" BorderBrush="#17151314" BorderThickness="1" CornerRadius="7" Padding="10">
-          <StackPanel Orientation="Horizontal">
-            <Border Width="30" Height="30" CornerRadius="6" Background="{StaticResource VioletWashBrush}" Margin="0,0,10,0">
-              <TextBlock Text="A1" Foreground="{StaticResource VioletBrush}" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
-            </Border>
-            <TextBlock Text="Audio track" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" />
-            <TextBlock Text="Audio follows the shared playback clock." Foreground="{StaticResource FaintBrush}" VerticalAlignment="Center" Margin="24,0,0,0" />
-          </StackPanel>
-        </Border>
+        <ScrollViewer x:Name="TimelineScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled">
+          <Canvas x:Name="TimelineCanvas" Background="#22FDFCF8" />
+        </ScrollViewer>
       </StackPanel>
     </Border>
   </Grid>

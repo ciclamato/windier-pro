@@ -3,6 +3,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Input;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.ApplicationModel.DataTransfer;
@@ -14,6 +15,7 @@ using PalmierPro.Core.Media;
 using PalmierPro.Core.Models;
 using PalmierPro.Core.Persistence;
 using PalmierPro.WinUI.AI;
+using PalmierPro.WinUI.Audio;
 
 namespace PalmierPro.WinUI;
 
@@ -26,6 +28,12 @@ public sealed partial class MainWindow : Window
     private readonly WindowsCredentialStore _credentials = new();
     private McpLoopbackServer? _mcp;
     private PalmierPro.Core.AI.CodexAppServerClient? _codex;
+    private WindowsAudioEngine? _audio;
+    private const double PixelsPerFrame = 2;
+    private const double TrackHeight = 58;
+    private const double TrackLabelWidth = 66;
+    private string? _selectedClipId;
+    private ClipDragState? _drag;
 
     public MainWindow()
     {
@@ -119,6 +127,17 @@ public sealed partial class MainWindow : Window
         if (MediaList.SelectedItem is not MediaItem item) return;
         PreviewStatus.Text = $"{item.Name}  ·  {item.DurationLabel}";
         EmptyState.Visibility = Visibility.Collapsed;
+        if (item.Type == ClipType.Audio)
+        {
+            try
+            {
+                _audio ??= new WindowsAudioEngine();
+                _audio.PlayFile(item.Path);
+                PreviewStatus.Text = $"{item.Name}  ·  playing via {_audio.SelectedDevice?.Name ?? "WASAPI"}";
+            }
+            catch (Exception error) { ProjectStatus.Text = error.Message; }
+            return;
+        }
         _ = RenderPreviewAsync(item);
     }
 
@@ -196,10 +215,181 @@ public sealed partial class MainWindow : Window
                 MediaSource.Project project => Path.GetFullPath(Path.Combine(_projectPath ?? string.Empty, project.RelativePath)),
                 _ => string.Empty
             };
-            MediaItems.Add(new MediaItem(entry.Id, clip.Id, entry.Name, path, entry.Duration, entry.SourceWidth, entry.SourceHeight));
+            MediaItems.Add(new MediaItem(entry.Id, clip.Id, entry.Name, path, entry.Type, entry.Duration, entry.SourceWidth, entry.SourceHeight));
         }
         ClipSummary.Text = MediaItems.Count == 0 ? "No clips" : $"{MediaItems.Count} clip{(MediaItems.Count == 1 ? "" : "s")}";
+        RefreshTimeline();
     }
+
+    private void RefreshTimeline()
+    {
+        TimelineCanvas.Children.Clear();
+        var timeline = _document.Project.Timelines.FirstOrDefault();
+        if (timeline is null) return;
+        var totalFrames = Math.Max(timeline.DisplayFrames, timeline.Fps * 10);
+        var width = TrackLabelWidth + totalFrames * PixelsPerFrame + 120;
+        TimelineCanvas.Width = width;
+        TimelineCanvas.Height = Math.Max(TrackHeight, timeline.Tracks.Count * TrackHeight);
+        TimelineFps.Text = $"  /  {timeline.Fps} FPS";
+        TimelineReadout.Text = $"  /  {Timecode(0, timeline.Fps)}";
+
+        for (var trackIndex = 0; trackIndex < timeline.Tracks.Count; trackIndex++)
+        {
+            var track = timeline.Tracks[trackIndex];
+            var row = new Border
+            {
+                Width = width,
+                Height = TrackHeight - 4,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(34, 253, 252, 248)),
+                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(35, 21, 19, 20)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(7)
+            };
+            Canvas.SetLeft(row, 0);
+            Canvas.SetTop(row, trackIndex * TrackHeight + 2);
+            TimelineCanvas.Children.Add(row);
+
+            var trackLabel = new TextBlock
+            {
+                Text = track.Name ?? $"{track.Type} {trackIndex + 1}",
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MutedBrush"],
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Canvas.SetLeft(trackLabel, 14);
+            Canvas.SetTop(trackLabel, trackIndex * TrackHeight + 21);
+            TimelineCanvas.Children.Add(trackLabel);
+
+            foreach (var clip in track.Clips.OrderBy(item => item.StartFrame))
+            {
+                var assetName = _document.Manifest.Entries.FirstOrDefault(entry => entry.Id == clip.MediaRef)?.Name ?? clip.MediaRef;
+                var block = new Button
+                {
+                    Tag = clip.Id,
+                    Content = new TextBlock { Text = assetName, TextTrimming = TextTrimming.CharacterEllipsis },
+                    Width = Math.Max(38, clip.DurationFrames * PixelsPerFrame),
+                    Height = TrackHeight - 16,
+                    Padding = new Thickness(8, 4, 8, 4),
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Background = ClipBrush(clip, clip.Id == _selectedClipId),
+                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["InkBrush"],
+                    BorderBrush = clip.Id == _selectedClipId
+                        ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["VioletBrush"]
+                        : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(45, 22, 21, 19)),
+                    BorderThickness = new Thickness(1)
+                };
+                block.Click += ClipBlock_Click;
+                block.PointerPressed += ClipBlock_PointerPressed;
+                block.PointerMoved += ClipBlock_PointerMoved;
+                block.PointerReleased += ClipBlock_PointerReleased;
+                Canvas.SetLeft(block, TrackLabelWidth + clip.StartFrame * PixelsPerFrame);
+                Canvas.SetTop(block, trackIndex * TrackHeight + 9);
+                TimelineCanvas.Children.Add(block);
+            }
+        }
+    }
+
+    private void ClipBlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string clipId }) return;
+        _selectedClipId = clipId;
+        foreach (var child in TimelineCanvas.Children.OfType<Button>())
+        {
+            if (child.Tag is not string candidateId) continue;
+            child.Background = ClipBrush(FindClip(candidateId), candidateId == _selectedClipId);
+            child.BorderBrush = candidateId == _selectedClipId
+                ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["VioletBrush"]
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(45, 22, 21, 19));
+        }
+        var media = MediaItems.FirstOrDefault(item => item.ClipId == clipId);
+        if (media is not null) MediaList.SelectedItem = media;
+        ProjectStatus.Text = "Clip selected · drag to move";
+    }
+
+    private void ClipBlock_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string clipId } block) return;
+        var clip = FindClip(clipId);
+        var point = e.GetCurrentPoint(TimelineCanvas);
+        if (!point.Properties.IsLeftButtonPressed) return;
+        _selectedClipId = clipId;
+        _drag = new ClipDragState(block, clipId, point.Position.X, clip.StartFrame);
+        block.CapturePointer(e.Pointer);
+        e.Handled = false;
+    }
+
+    private void ClipBlock_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_drag is null || sender is not Button block || !ReferenceEquals(block, _drag.Block)) return;
+        var point = e.GetCurrentPoint(TimelineCanvas);
+        if (!point.Properties.IsLeftButtonPressed) return;
+        var newStart = Math.Max(0, _drag.OriginalStartFrame + (int)Math.Round((point.Position.X - _drag.PointerStartX) / PixelsPerFrame));
+        Canvas.SetLeft(block, TrackLabelWidth + newStart * PixelsPerFrame);
+        var timeline = _document.Project.Timelines.FirstOrDefault();
+        if (timeline is not null) TimelineReadout.Text = $"  /  {Timecode(newStart, timeline.Fps)}";
+    }
+
+    private async void ClipBlock_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_drag is null || sender is not Button block || !ReferenceEquals(block, _drag.Block)) return;
+        var point = e.GetCurrentPoint(TimelineCanvas);
+        block.ReleasePointerCapture(e.Pointer);
+        var drag = _drag;
+        _drag = null;
+        var timeline = _document.Project.Timelines.FirstOrDefault();
+        if (timeline is null) return;
+        var newStart = Math.Max(0, drag.OriginalStartFrame + (int)Math.Round((point.Position.X - drag.PointerStartX) / PixelsPerFrame));
+        if (newStart == drag.OriginalStartFrame) return;
+        try
+        {
+            await _document.ExecuteAsync(new MoveClipCommand(timeline.Id, drag.ClipId, newStart));
+            RefreshFromDocument();
+            ProjectStatus.Text = "Clip moved · undo available";
+        }
+        catch (Exception error)
+        {
+            RefreshTimeline();
+            ProjectStatus.Text = error.Message;
+        }
+    }
+
+    private async void SplitSelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedClipId is null) { ProjectStatus.Text = "Select a timeline clip first"; return; }
+        var timeline = _document.Project.Timelines.FirstOrDefault();
+        if (timeline is null) return;
+        var clip = FindClip(_selectedClipId);
+        if (clip.DurationFrames < 2) { ProjectStatus.Text = "Clip is too short to split"; return; }
+        try
+        {
+            await _document.ExecuteAsync(new SplitClipCommand(timeline.Id, clip.Id, clip.StartFrame + clip.DurationFrames / 2));
+            RefreshFromDocument();
+            ProjectStatus.Text = "Clip split · undo available";
+        }
+        catch (Exception error) { ProjectStatus.Text = error.Message; }
+    }
+
+    private Clip FindClip(string clipId) => _document.Project.Timelines.SelectMany(timeline => timeline.Tracks).SelectMany(track => track.Clips).First(clip => clip.Id == clipId);
+
+    private Microsoft.UI.Xaml.Media.Brush ClipBrush(Clip clip, bool selected)
+    {
+        if (selected) return (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["VioletWashBrush"];
+        var color = clip.MediaType == ClipType.Audio ? Windows.UI.Color.FromArgb(90, 119, 112, 201) : Windows.UI.Color.FromArgb(58, 253, 252, 248);
+        return new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
+    }
+
+    private static string Timecode(int frame, int fps)
+    {
+        var totalSeconds = Math.Max(0, frame) / Math.Max(1, fps);
+        var hours = totalSeconds / 3600;
+        var minutes = totalSeconds / 60 % 60;
+        var seconds = totalSeconds % 60;
+        var frames = Math.Max(0, frame) % Math.Max(1, fps);
+        return $"{hours:00}:{minutes:00}:{seconds:00}:{frames:00}";
+    }
+
+    private sealed record ClipDragState(Button Block, string ClipId, double PointerStartX, int OriginalStartFrame);
 
     private async Task<string?> PickProjectPathAsync()
     {
@@ -251,6 +441,43 @@ public sealed partial class MainWindow : Window
         await _document.RedoAsync();
         RefreshFromDocument();
         ProjectStatus.Text = "Redid last change";
+    }
+
+    private async void ConfigureAudio_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _audio ??= new WindowsAudioEngine();
+            var devices = _audio.EnumerateDevices();
+            var choices = devices.Where(device => device.Backend != AudioBackendKind.Asio)
+                .SelectMany(device => new[]
+                {
+                    device,
+                    device with { Id = device.Id, Name = device.Name + " · WASAPI exclusive", Backend = AudioBackendKind.WasapiExclusive }
+                })
+                .Concat(devices.Where(device => device.Backend == AudioBackendKind.Asio))
+                .ToArray();
+            if (choices.Length == 0) throw new InvalidOperationException("No active WASAPI output or installed ASIO driver was found.");
+            var selector = new ComboBox { ItemsSource = choices, DisplayMemberPath = "Name", SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+            var note = new TextBlock
+            {
+                Text = "WASAPI shared is the safest default. Exclusive mode reduces mixing latency. ASIO4ALL appears here only when its driver is already installed.",
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MutedBrush"]
+            };
+            var dialog = new ContentDialog
+            {
+                Title = "Audio output",
+                Content = new StackPanel { Spacing = 12, Children = { selector, note } },
+                PrimaryButtonText = "Use output",
+                CloseButtonText = "Cancel",
+                XamlRoot = Content.XamlRoot
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary || selector.SelectedItem is not AudioOutputDevice selected) return;
+            _audio.Select(selected);
+            ProjectStatus.Text = $"Audio · {selected.Name}";
+        }
+        catch (Exception error) { await ShowErrorAsync("Could not configure audio", error.Message); }
     }
 
     private async void ConnectAgent_Click(object sender, RoutedEventArgs e)
@@ -308,6 +535,7 @@ public sealed partial class MainWindow : Window
     {
         if (_mcp is not null) await _mcp.DisposeAsync();
         if (_codex is not null) await _codex.DisposeAsync();
+        _audio?.Dispose();
     }
 
     private async Task ShowErrorAsync(string title, string message)
@@ -351,12 +579,13 @@ public sealed partial class MainWindow : Window
 
 public sealed class MediaItem
 {
-    public MediaItem(string assetId, string clipId, string name, string path, double duration, int? width, int? height)
+    public MediaItem(string assetId, string clipId, string name, string path, ClipType type, double duration, int? width, int? height)
     {
         AssetId = assetId;
         ClipId = clipId;
         Name = name;
         Path = path;
+        Type = type;
         Duration = duration;
         Width = width;
         Height = height;
@@ -366,6 +595,7 @@ public sealed class MediaItem
     public string ClipId { get; set; }
     public string Name { get; set; }
     public string Path { get; set; }
+    public ClipType Type { get; set; }
     public double Duration { get; set; }
     public int? Width { get; set; }
     public int? Height { get; set; }
