@@ -1,4 +1,8 @@
 .DS_Store
+
+# Windows/.NET build output
+Windows/**/bin/
+Windows/**/obj/
 .swiftpm/
 .build/
 .vscode/

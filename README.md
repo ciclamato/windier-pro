@@ -55,6 +55,10 @@ Generate videos and images with SOTA models like Seedance, Kling, Nano Banana Pr
 
 Connects your Claude/Codex/Cursor via MCP, or use the in-app agent to work on the same project together.
 
+## Windows port
+
+The fork includes a Windows-native WPF foundation under [`Windows/`](Windows/). It currently supports media import by file picker or drag-and-drop, clip ordering and removal, preview playback, and portable project save/load. See [`Windows/README.md`](Windows/README.md) for build instructions and the porting boundary.
+
 ## MCP server
 
 When the app is open, it exposes an MCP server at `http://127.0.0.1:19789/mcp` via HTTP. To connect:
