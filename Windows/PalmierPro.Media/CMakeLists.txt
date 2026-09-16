@@ -25,7 +25,7 @@ if(PALMIER_ENABLE_FFMPEG)
         target_include_directories(PalmierPro.Media PRIVATE "${FFMPEG_INCLUDE_DIR}")
         target_link_libraries(PalmierPro.Media PRIVATE "${AVFORMAT_LIBRARY}" "${AVCODEC_LIBRARY}" "${AVUTIL_LIBRARY}")
     else()
-        message(STATUS "FFmpeg development libraries not found; building a diagnostic stub")
+        message(STATUS "FFmpeg development libraries not found; native probing will report the managed-adapter requirement")
     endif()
 endif()
 

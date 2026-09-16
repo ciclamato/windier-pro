@@ -17,7 +17,7 @@ source behavior is inventoried and has an explicit implementation boundary.
 | Preview | FFmpeg frame capture; D3D/HLSL boundary defined | bootstrap | Frame comparison against reference |
 | Audio clock | Shared clock plus WASAPI shared/exclusive and installed ASIO driver selection | bootstrap | A/V drift stays within one frame |
 | Local ML | On-demand checksum store and ONNX model boundary | bootstrap | Beat and SigLIP parity thresholds |
-| Packaging | Self-contained WinUI x64 output and installer boundary | planned | Clean-machine install/uninstall |
+| Packaging | Self-contained WinUI x64 output and reproducible portable ZIP script | bootstrap | Clean-machine install/uninstall; signed installer remains |
 
 ## Project and editing behavior
 
@@ -29,9 +29,9 @@ source behavior is inventoried and has an explicit implementation boundary.
 | Unicode and relative Windows paths | planned | Re-link and case-collision fixture |
 | Staged package saves and recovery | working | Atomic replacement test |
 | One undo entry per intent | working | Import/remove/failure/MCP tests |
-| Trim, move, split, ripple/roll/slip | bootstrap | Add boundary and ripple tests |
+| Trim, move, split, ripple/roll/slip | bootstrap | Core boundary tests pass; UI roll/slip tools remain |
 | Tracks, linked clips, nesting, multicam | bootstrap | Add command fixtures |
-| Markers and captions | bootstrap | Add caption timing fixtures |
+| Markers and captions | bootstrap | Marker and SRT/VTT cue import tests pass; caption styling remains |
 | Keyframes and interpolation | working | Add golden sampling fixtures |
 | Search | bootstrap | Text/media-name search fixture |
 | Effects and grading data | bootstrap | HLSL image comparisons |
@@ -43,8 +43,8 @@ source behavior is inventoried and has an explicit implementation boundary.
 | Probe, thumbnails, filmstrips, waveforms | bootstrap | FFmpeg/native media adapters |
 | Preview/export render graph | bootstrap | D3D11 + HLSL shared graph |
 | Video/audio mixing | bootstrap | Native FFmpeg + selected WASAPI/ASIO output |
-| H.264 and ProRes export profiles | bootstrap | FFmpeg export preflight/queue |
-| XML/FCPXML | planned | C# exporter using immutable snapshot |
+| H.264 and ProRes export profiles | bootstrap | FFmpeg layered/multi-clip export integration test |
+| XML/FCPXML | working | C# XMEML/FCPXML exporter test |
 | Beat This and SigLIP 2 | bootstrap | ONNX Runtime conversion and parity checks |
 | Speech/VAD/enhancement | planned | Windows-capable local adapters |
 | OpenAI and Anthropic agent adapters | bootstrap | Independent API-key/provider tests |

@@ -81,7 +81,7 @@
             <Border Width="44" Height="44" CornerRadius="22" Background="#26FFFFFF" HorizontalAlignment="Center">
               <TextBlock Text="✦" Foreground="#E8E3F4" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
-            <TextBlock Text="Your canvas is quiet" Foreground="#F2EFE8" FontSize="22" HorizontalAlignment="Center" Margin="0,14,0,0" />
+            <TextBlock Text="Bring in your first clip" Foreground="#F2EFE8" FontSize="22" HorizontalAlignment="Center" Margin="0,14,0,0" />
             <TextBlock Text="Import a clip to begin shaping the sequence." Foreground="#A9A4AA" Margin="0,7,0,0" />
           </StackPanel>
           <Border VerticalAlignment="Bottom" Background="#CC101010" Padding="12" CornerRadius="0,0,12,12">
@@ -102,7 +102,7 @@
             <StackPanel>
               <TextBlock Text="AI / AGENT" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" />
               <TextBlock Text="Describe a change" FontSize="14" FontWeight="SemiBold" Margin="0,4,0,0" />
-              <TextBlock Text="Connect Codex or another provider when you are ready." TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,12" />
+              <TextBlock Text="Connect Codex or another provider to make undoable edits from natural language." TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" Margin="0,4,0,12" />
               <Button Content="Connect agent" Background="{StaticResource PanelBrush}" />
             </StackPanel>
           </Border>

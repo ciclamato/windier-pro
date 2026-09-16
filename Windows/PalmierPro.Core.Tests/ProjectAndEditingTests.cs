@@ -1,7 +1,13 @@
 using System.Text;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Xml.Linq;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using PalmierPro.Core.Automation;
+using PalmierPro.Core.AI;
 using PalmierPro.Core.Editing;
 using PalmierPro.Core.Export;
 using PalmierPro.Core.Models;
@@ -293,6 +299,202 @@ public sealed class ProjectAndEditingTests
         await document.UndoAsync();
         Assert.Empty(document.Project.Timelines[0].Tracks.Single(track => track.Id == subtitleTrack.Id).Clips);
         Assert.Empty(document.Manifest.Entries);
+    }
+
+    [Fact]
+    public void XmlExportsContainTimelineTracksAndResolvedMedia()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "palmier-xml-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mediaPath = Path.Combine(root, "shot.mp4");
+            File.WriteAllBytes(mediaPath, [0]);
+            var project = ProjectFile.CreateDefault();
+            var timeline = project.Timelines[0];
+            timeline.Tracks[0].Clips.Add(new Clip { MediaRef = "asset-1", StartFrame = 0, DurationFrames = 30, MediaType = ClipType.Video });
+            var snapshot = new ProjectSnapshot(project, new MediaManifest
+            {
+                Entries = [new MediaManifestEntry
+                {
+                    Id = "asset-1", Name = "shot.mp4", Type = ClipType.Video, Duration = 1,
+                    Source = new MediaSource.External(mediaPath)
+                }]
+            });
+
+            var fcpxml = XDocument.Parse(XmlTimelineExporter.Render(snapshot, root, TimelineXmlFormat.Fcpxml));
+            var xmeml = XDocument.Parse(XmlTimelineExporter.Render(snapshot, root, TimelineXmlFormat.Xmeml));
+            Assert.Equal("fcpxml", fcpxml.Root?.Name.LocalName);
+            Assert.NotNull(fcpxml.Descendants("asset-clip").Single());
+            Assert.Equal("xmeml", xmeml.Root?.Name.LocalName);
+            Assert.NotNull(xmeml.Descendants("clipitem").Single());
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void LocalModelDefinitionsRejectUnverifiedDownloads()
+    {
+        var model = new LocalModelDefinition(
+            "beat-this",
+            new Uri("https://models.example.invalid/beat.onnx"),
+            "not-a-real-checksum");
+        Assert.Throws<ArgumentException>(() => model.Validate());
+        Assert.Equal("beat-this", PalmierLocalModels.BeatThis(model.DownloadUri, new string('a', 64)).Id);
+    }
+
+    [Fact]
+    public async Task FfmpegExportComposesSequentialClipsWhenFfmpegIsAvailable()
+    {
+        var executable = FindExecutable("ffmpeg");
+        if (executable is null) throw Xunit.Sdk.SkipException.ForSkip("FFmpeg is not installed on this test machine.");
+        var root = Path.Combine(Path.GetTempPath(), "palmier-ffmpeg-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var first = Path.Combine(root, "first.mp4");
+            var second = Path.Combine(root, "second.mp4");
+            await RunProcessAsync(executable, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64:r=30:d=1", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", first]);
+            await RunProcessAsync(executable, ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:s=64x64:r=30:d=1", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", second]);
+            var project = ProjectFile.CreateDefault();
+            var timeline = project.Timelines[0];
+            timeline.Width = 64;
+            timeline.Height = 64;
+            timeline.Tracks[0].Clips.Add(new Clip { MediaRef = "first", StartFrame = 0, DurationFrames = 30, MediaType = ClipType.Video });
+            timeline.Tracks[0].Clips.Add(new Clip { MediaRef = "second", StartFrame = 30, DurationFrames = 30, MediaType = ClipType.Video });
+            var snapshot = new ProjectSnapshot(project, new MediaManifest
+            {
+                Entries =
+                [
+                    new MediaManifestEntry { Id = "first", Name = "first.mp4", Type = ClipType.Video, Duration = 1, HasAudio = false, Source = new MediaSource.External(first) },
+                    new MediaManifestEntry { Id = "second", Name = "second.mp4", Type = ClipType.Video, Duration = 1, HasAudio = false, Source = new MediaSource.External(second) }
+                ]
+            });
+            var output = Path.Combine(root, "out.mp4");
+            await new FfmpegExportService(executable).ExportAsync(snapshot, root, output, ExportProfiles.H264);
+            Assert.True(File.Exists(output));
+            Assert.True(new FileInfo(output).Length > 0);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task LocalModelStoreResumesPartialDownloadsBeforeChecksumValidation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "palmier-model-tests", Guid.NewGuid().ToString("N"));
+        var handler = new ResumeHandler();
+        try
+        {
+            var modelBytes = Encoding.UTF8.GetBytes("abcdef");
+            var checksum = Convert.ToHexString(SHA256.HashData(modelBytes));
+            var model = new LocalModelDefinition("resume", new Uri("https://models.example.invalid/model.onnx"), checksum);
+            var store = new LocalModelStore(root, new HttpClient(handler));
+            var partial = store.GetPath(model) + ".partial";
+            Directory.CreateDirectory(Path.GetDirectoryName(partial)!);
+            await File.WriteAllTextAsync(partial, "abc");
+
+            var result = await store.EnsureAsync(model);
+
+            Assert.True(handler.SawRange);
+            Assert.Equal("abcdef", await File.ReadAllTextAsync(result));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public async Task RollAndSlipPreserveTimelineBoundaries()
+    {
+        var project = ProjectFile.CreateDefault();
+        var timeline = project.Timelines[0];
+        var track = timeline.Tracks[0];
+        var document = new EditorDocument(project);
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, track.Id, new Clip { Id = "left", MediaRef = "a", StartFrame = 0, DurationFrames = 30, MediaType = ClipType.Video }));
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, track.Id, new Clip { Id = "right", MediaRef = "b", StartFrame = 30, DurationFrames = 30, MediaType = ClipType.Video }));
+
+        await document.ExecuteAsync(new RollEditCommand(timeline.Id, "left", "right", 20));
+        await document.ExecuteAsync(new SlipClipCommand(timeline.Id, "right", 7));
+        var clips = document.Project.Timelines[0].Tracks[0].Clips.OrderBy(clip => clip.StartFrame).ToArray();
+        Assert.Equal((0, 20, 0), (clips[0].StartFrame, clips[0].DurationFrames, clips[0].TrimStartFrame));
+        Assert.Equal((20, 40, 7), (clips[1].StartFrame, clips[1].DurationFrames, clips[1].TrimStartFrame));
+        await document.UndoAsync();
+        await document.UndoAsync();
+        clips = document.Project.Timelines[0].Tracks[0].Clips.OrderBy(clip => clip.StartFrame).ToArray();
+        Assert.Equal((0, 30, 0), (clips[0].StartFrame, clips[0].DurationFrames, clips[0].TrimStartFrame));
+        Assert.Equal((30, 30, 0), (clips[1].StartFrame, clips[1].DurationFrames, clips[1].TrimStartFrame));
+    }
+
+    [Fact]
+    public void TimelineSearchFindsMediaAndCaptionText()
+    {
+        var project = ProjectFile.CreateDefault();
+        var timeline = project.Timelines[0];
+        timeline.Tracks[0].Clips.Add(new Clip { Id = "video-1", MediaRef = "asset-1", StartFrame = 0, DurationFrames = 30, MediaType = ClipType.Video });
+        timeline.Tracks[0].Clips.Add(new Clip { Id = "caption-1", MediaRef = "captions", StartFrame = 30, DurationFrames = 30, MediaType = ClipType.Subtitle, TextContent = "Venice at dusk" });
+        var manifest = new MediaManifest
+        {
+            Entries =
+            [
+                new MediaManifestEntry { Id = "asset-1", Name = "venice-shot.mp4" },
+                new MediaManifestEntry { Id = "captions", Name = "interview.srt" }
+            ]
+        };
+
+        Assert.Equal("video-1", TimelineSearch.Search(project, manifest, "venice-shot").Single().ClipId);
+        Assert.Equal("caption-1", TimelineSearch.Search(project, manifest, "dusk").Single().ClipId);
+    }
+
+    private sealed class ResumeHandler : HttpMessageHandler
+    {
+        public bool SawRange { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            SawRange = request.Headers.Range?.Ranges.SingleOrDefault()?.From == 3;
+            var response = new HttpResponseMessage(SawRange ? HttpStatusCode.PartialContent : HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(Encoding.UTF8.GetBytes("def"))
+            };
+            response.Content.Headers.ContentLength = 3;
+            response.Content.Headers.ContentRange = new ContentRangeHeaderValue(3, 5, 6);
+            return Task.FromResult(response);
+        }
+    }
+
+    private static string? FindExecutable(string name)
+    {
+        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        return path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(directory => Path.Combine(directory, name + (OperatingSystem.IsWindows() ? ".exe" : string.Empty)))
+            .FirstOrDefault(File.Exists);
+    }
+
+    private static async Task RunProcessAsync(string executable, IReadOnlyList<string> arguments)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = executable,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }
+        };
+        foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        Assert.True(process.Start());
+        var error = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        Assert.True(process.ExitCode == 0, error);
     }
 
     [Fact]

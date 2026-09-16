@@ -92,6 +92,38 @@ public sealed record TrimClipCommand(
     }
 }
 
+public sealed record RollEditCommand(string TimelineId, string LeftClipId, string RightClipId, int NewBoundaryFrame) : IEditorCommand
+{
+    public string Name => "Roll edit";
+
+    public void Apply(ProjectFile project)
+    {
+        var left = EditorCommandHelpers.FindClip(project, TimelineId, LeftClipId, out var leftTrack);
+        var right = EditorCommandHelpers.FindClip(project, TimelineId, RightClipId, out var rightTrack);
+        if (leftTrack.Id != rightTrack.Id) throw new InvalidOperationException("A roll edit requires clips on the same track.");
+        if (left.EndFrame > right.StartFrame || NewBoundaryFrame <= left.StartFrame || NewBoundaryFrame >= right.EndFrame)
+            throw new ArgumentOutOfRangeException(nameof(NewBoundaryFrame), "The roll boundary must remain inside both clips' combined range.");
+        left.DurationFrames = NewBoundaryFrame - left.StartFrame;
+        var sourceDelta = NewBoundaryFrame - right.StartFrame;
+        right.StartFrame = NewBoundaryFrame;
+        right.DurationFrames -= sourceDelta;
+        right.TrimStartFrame = Math.Max(0, right.TrimStartFrame + sourceDelta);
+        leftTrack.Clips.Sort((a, b) => a.StartFrame.CompareTo(b.StartFrame));
+    }
+}
+
+public sealed record SlipClipCommand(string TimelineId, string ClipId, int NewTrimStartFrame) : IEditorCommand
+{
+    public string Name => "Slip clip";
+
+    public void Apply(ProjectFile project)
+    {
+        if (NewTrimStartFrame < 0) throw new ArgumentOutOfRangeException(nameof(NewTrimStartFrame));
+        var clip = EditorCommandHelpers.FindClip(project, TimelineId, ClipId, out _);
+        clip.TrimStartFrame = NewTrimStartFrame;
+    }
+}
+
 public sealed record RemoveClipCommand(string TimelineId, string ClipId) : IEditorCommand
 {
     public string Name => "Remove clip";

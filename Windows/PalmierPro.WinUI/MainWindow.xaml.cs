@@ -138,11 +138,20 @@ public sealed partial class MainWindow : Window
             picker.SuggestedFileName = "Palmier export";
             picker.FileTypeChoices.Add("H.264 video", [".mp4"]);
             picker.FileTypeChoices.Add("ProRes video", [".mov"]);
+            picker.FileTypeChoices.Add("Final Cut Pro XML", [".fcpxml"]);
+            picker.FileTypeChoices.Add("Premiere XML", [".xml"]);
             var file = await picker.PickSaveFileAsync();
             if (file is null) return;
-            var profile = Path.GetExtension(file.Path).Equals(".mov", StringComparison.OrdinalIgnoreCase)
-                ? ExportProfiles.ProRes
-                : ExportProfiles.H264;
+            var extension = Path.GetExtension(file.Path);
+            if (extension.Equals(".fcpxml", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".xml", StringComparison.OrdinalIgnoreCase))
+            {
+                await XmlTimelineExporter.ExportAsync(snapshot, _projectPath ?? string.Empty, file.Path,
+                    extension.Equals(".fcpxml", StringComparison.OrdinalIgnoreCase) ? TimelineXmlFormat.Fcpxml : TimelineXmlFormat.Xmeml);
+                ProjectStatus.Text = $"Exported · {Path.GetFileName(file.Path)}";
+                return;
+            }
+            var profile = extension.Equals(".mov", StringComparison.OrdinalIgnoreCase) ? ExportProfiles.ProRes : ExportProfiles.H264;
             ProjectStatus.Text = "Exporting · 0%";
             var progress = new Progress<double>(value => ProjectStatus.Text = $"Exporting · {value:P0}");
             await new FfmpegExportService().ExportAsync(snapshot, _projectPath ?? string.Empty, file.Path, profile, progress);

@@ -53,7 +53,7 @@ int palmier_media_probe(const char* utf8_path, PalmierMediaProbeResult* result, 
     return 0;
 #else
     (void)utf8_path;
-    set_error(error_message, error_message_capacity, "This build has no FFmpeg development libraries. Use the managed FFmpeg adapter or rebuild with PALMIER_FFMPEG_ROOT.");
+    set_error(error_message, error_message_capacity, "This native build needs FFmpeg development libraries. Use the managed FFmpeg adapter or rebuild with PALMIER_FFMPEG_ROOT.");
     return -10;
 #endif
 }
