@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using PalmierPro.Core.Automation;
 using PalmierPro.Core.Editing;
+using PalmierPro.Core.Export;
 using PalmierPro.Core.Models;
 using PalmierPro.Core.Persistence;
 using PalmierPro.Core.Serialization;
@@ -176,6 +177,122 @@ public sealed class ProjectAndEditingTests
         Assert.False(document.IsDirty);
         var receipt = await document.UndoAsync();
         Assert.False(receipt.Changed);
+    }
+
+    [Fact]
+    public async Task TimelineTrimAndPropertiesAreOneUndoableIntent()
+    {
+        var project = ProjectFile.CreateDefault();
+        var timeline = project.Timelines[0];
+        var track = timeline.Tracks[0];
+        var document = new EditorDocument(project, new MediaManifest());
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, track.Id, new Clip
+        {
+            Id = "clip-1", MediaRef = "asset-1", StartFrame = 30, DurationFrames = 90, MediaType = ClipType.Video
+        }));
+
+        await document.ExecuteAsync(new TrimClipCommand(timeline.Id, "clip-1", 60, 15, 45));
+        await document.ExecuteAsync(new SetClipPropertiesCommand(timeline.Id, "clip-1", .75, .5, 1.5, 48));
+        var clip = document.Project.Timelines[0].Tracks[0].Clips[0];
+        Assert.Equal(45, clip.StartFrame);
+        Assert.Equal(48, clip.DurationFrames);
+        Assert.Equal(15, clip.TrimStartFrame);
+        Assert.Equal(.75, clip.Opacity);
+        Assert.Equal(1.5, clip.Speed);
+
+        await document.UndoAsync();
+        clip = document.Project.Timelines[0].Tracks[0].Clips[0];
+        Assert.Equal(60, clip.DurationFrames);
+        Assert.Equal(1, clip.Opacity);
+        await document.UndoAsync();
+        clip = document.Project.Timelines[0].Tracks[0].Clips[0];
+        Assert.Equal(30, clip.StartFrame);
+        Assert.Equal(90, clip.DurationFrames);
+        Assert.Equal(0, clip.TrimStartFrame);
+    }
+
+    [Fact]
+    public async Task RippleDeleteShiftsEveryTrackAndCleansUnusedAsset()
+    {
+        var project = ProjectFile.CreateDefault();
+        var timeline = project.Timelines[0];
+        var video = timeline.Tracks[0];
+        var audio = timeline.Tracks[1];
+        var manifest = new MediaManifest
+        {
+            Entries =
+            [
+                new MediaManifestEntry { Id = "video", Name = "video.mp4" },
+                new MediaManifestEntry { Id = "audio", Name = "audio.wav" },
+                new MediaManifestEntry { Id = "unused", Name = "unused.wav" }
+            ]
+        };
+        var document = new EditorDocument(project, manifest);
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, video.Id, new Clip { Id = "v1", MediaRef = "video", StartFrame = 0, DurationFrames = 30, MediaType = ClipType.Video }));
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, video.Id, new Clip { Id = "v2", MediaRef = "video", StartFrame = 30, DurationFrames = 30, MediaType = ClipType.Video }));
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, audio.Id, new Clip { Id = "a1", MediaRef = "audio", StartFrame = 30, DurationFrames = 30, MediaType = ClipType.Audio }));
+
+        await document.ExecuteAsync(new RippleDeleteCommand(timeline.Id, "v1"));
+
+        Assert.Equal(0, document.Project.Timelines[0].Tracks[0].Clips.Single(clip => clip.Id == "v2").StartFrame);
+        Assert.Equal(0, document.Project.Timelines[0].Tracks[1].Clips.Single().StartFrame);
+        Assert.Contains(document.Manifest.Entries, entry => entry.Id == "video");
+        Assert.Contains(document.Manifest.Entries, entry => entry.Id == "audio");
+        Assert.DoesNotContain(document.Manifest.Entries, entry => entry.Id == "unused");
+        await document.UndoAsync();
+        Assert.Equal(30, document.Project.Timelines[0].Tracks[0].Clips.Single(clip => clip.Id == "v2").StartFrame);
+    }
+
+    [Fact]
+    public async Task ExportPreflightAcceptsLayeredAndSequentialVideo()
+    {
+        var project = ProjectFile.CreateDefault();
+        var timeline = project.Timelines[0];
+        var video = timeline.Tracks[0];
+        var document = new EditorDocument(project, new MediaManifest());
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, video.Id, new Clip
+        {
+            Id = "v1", MediaRef = "asset-1", StartFrame = 0, DurationFrames = 30, MediaType = ClipType.Video
+        }));
+        await document.ExecuteAsync(new InsertClipCommand(timeline.Id, video.Id, new Clip
+        {
+            Id = "v2", MediaRef = "asset-2", StartFrame = 30, DurationFrames = 30, MediaType = ClipType.Video
+        }));
+
+        var preflight = FfmpegExportService.Preflight(await document.SnapshotAsync());
+        Assert.True(preflight.IsSupported);
+        Assert.Equal(2, preflight.ClipCount);
+        Assert.Equal(60, preflight.FrameCount);
+    }
+
+    [Fact]
+    public async Task CaptionImportAddsCuesAsOneUndoableAssetOperation()
+    {
+        var project = ProjectFile.CreateDefault();
+        var timeline = project.Timelines[0];
+        var subtitleTrack = new Track { Type = ClipType.Subtitle, Name = "S1" };
+        timeline.Tracks.Add(subtitleTrack);
+        var document = new EditorDocument(project, new MediaManifest());
+        subtitleTrack = document.Project.Timelines[0].Tracks.Single(track => track.Type == ClipType.Subtitle);
+        var asset = new MediaManifestEntry
+        {
+            Id = "captions",
+            Name = "captions.srt",
+            Type = ClipType.Subtitle,
+            Source = new MediaSource.External("C:\\Media\\captions.srt")
+        };
+        var cues = new[]
+        {
+            new Clip { Id = "cue-1", MediaType = ClipType.Subtitle, StartFrame = 0, DurationFrames = 30, TextContent = "Hello" },
+            new Clip { Id = "cue-2", MediaType = ClipType.Subtitle, StartFrame = 45, DurationFrames = 30, TextContent = "World" }
+        };
+
+        await document.ExecuteAsync(new ImportSubtitleCommand(timeline.Id, subtitleTrack.Id, cues, asset));
+        Assert.Equal(2, document.Project.Timelines[0].Tracks.Single(track => track.Id == subtitleTrack.Id).Clips.Count);
+        Assert.Single(document.Manifest.Entries);
+        await document.UndoAsync();
+        Assert.Empty(document.Project.Timelines[0].Tracks.Single(track => track.Id == subtitleTrack.Id).Clips);
+        Assert.Empty(document.Manifest.Entries);
     }
 
     [Fact]

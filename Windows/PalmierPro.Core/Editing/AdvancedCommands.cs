@@ -13,6 +13,30 @@ public sealed record SetClipOpacityCommand(string TimelineId, string ClipId, dou
     }
 }
 
+public sealed record SetClipPropertiesCommand(
+    string TimelineId,
+    string ClipId,
+    double Opacity,
+    double Volume,
+    double Speed,
+    int DurationFrames) : IEditorCommand
+{
+    public string Name => "Edit clip properties";
+
+    public void Apply(ProjectFile project)
+    {
+        if (!double.IsFinite(Opacity) || Opacity is < 0 or > 1) throw new ArgumentOutOfRangeException(nameof(Opacity));
+        if (!double.IsFinite(Volume) || Volume is < 0 or > 16) throw new ArgumentOutOfRangeException(nameof(Volume));
+        if (!double.IsFinite(Speed) || Speed is <= 0 or > 16) throw new ArgumentOutOfRangeException(nameof(Speed));
+        if (DurationFrames <= 0) throw new ArgumentOutOfRangeException(nameof(DurationFrames));
+        var clip = EditorCommandHelpers.FindClip(project, TimelineId, ClipId, out _);
+        clip.Opacity = Opacity;
+        clip.Volume = Volume;
+        clip.Speed = Speed;
+        clip.DurationFrames = DurationFrames;
+    }
+}
+
 public sealed record SetEffectCommand(string TimelineId, string ClipId, Effect Effect) : IEditorCommand
 {
     public string Name => "Set effect";
@@ -71,6 +95,16 @@ public sealed record RippleDeleteCommand(string TimelineId, string ClipId) : IEd
             track.Clips.RemoveAll(candidate => candidate.Id == ClipId || link is not null && candidate.LinkGroupId == link && candidate.StartFrame == clip.StartFrame);
             foreach (var candidate in track.Clips.Where(candidate => candidate.StartFrame >= end)) candidate.StartFrame -= amount;
         }
+    }
+
+    public void Apply(ProjectFile project, MediaManifest manifest)
+    {
+        Apply(project);
+        var referenced = project.Timelines.SelectMany(timeline => timeline.Tracks)
+            .SelectMany(track => track.Clips)
+            .Select(clip => clip.MediaRef)
+            .ToHashSet(StringComparer.Ordinal);
+        manifest.Entries.RemoveAll(entry => !referenced.Contains(entry.Id));
     }
 }
 

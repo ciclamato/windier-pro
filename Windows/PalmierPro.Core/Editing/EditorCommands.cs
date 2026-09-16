@@ -70,7 +70,12 @@ public sealed record MoveClipCommand(string TimelineId, string ClipId, int NewSt
     }
 }
 
-public sealed record TrimClipCommand(string TimelineId, string ClipId, int NewDurationFrames, int? NewTrimStartFrame = null) : IEditorCommand
+public sealed record TrimClipCommand(
+    string TimelineId,
+    string ClipId,
+    int NewDurationFrames,
+    int? NewTrimStartFrame = null,
+    int? NewStartFrame = null) : IEditorCommand
 {
     public string Name => "Trim clip";
 
@@ -80,8 +85,10 @@ public sealed record TrimClipCommand(string TimelineId, string ClipId, int NewDu
         var clip = EditorCommandHelpers.FindClip(project, TimelineId, ClipId, out _);
         var newTrimStart = NewTrimStartFrame ?? clip.TrimStartFrame;
         if (newTrimStart < 0) throw new ArgumentOutOfRangeException(nameof(NewTrimStartFrame));
+        if (NewStartFrame is < 0) throw new ArgumentOutOfRangeException(nameof(NewStartFrame));
         clip.DurationFrames = NewDurationFrames;
         clip.TrimStartFrame = newTrimStart;
+        if (NewStartFrame is int newStart) clip.StartFrame = newStart;
     }
 }
 
@@ -111,6 +118,36 @@ public sealed record ImportMediaCommand(
         new InsertClipCommand(TimelineId, TrackId, Clip).Apply(project);
         if (manifest.Entries.Any(entry => entry.Id == Asset.Id))
             throw new InvalidOperationException($"Media asset '{Asset.Id}' already exists.");
+        manifest.Entries.Add(Asset);
+    }
+}
+
+public sealed record ImportSubtitleCommand(
+    string TimelineId,
+    string TrackId,
+    IReadOnlyList<Clip> Clips,
+    MediaManifestEntry Asset) : IEditorCommand
+{
+    public string Name => "Import captions";
+
+    public void Apply(ProjectFile project) => throw new InvalidOperationException("Import captions requires a manifest.");
+
+    public void Apply(ProjectFile project, MediaManifest manifest)
+    {
+        if (Clips.Count == 0) throw new InvalidDataException("The caption file contains no cues.");
+        if (manifest.Entries.Any(entry => entry.Id == Asset.Id))
+            throw new InvalidOperationException($"Media asset '{Asset.Id}' already exists.");
+        var track = EditorCommandHelpers.FindTrack(project, TimelineId, TrackId);
+        if (track.Type != ClipType.Subtitle) throw new InvalidOperationException("Captions must be inserted into a subtitle track.");
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var clip in Clips)
+        {
+            if (!ids.Add(clip.Id) || clip.StartFrame < 0 || clip.DurationFrames <= 0 || clip.MediaType != ClipType.Subtitle)
+                throw new InvalidDataException("The caption cues contain invalid timing or identifiers.");
+            clip.MediaRef = Asset.Id;
+            track.Clips.Add(clip.Clone());
+        }
+        track.Clips.Sort((left, right) => left.StartFrame.CompareTo(right.StartFrame));
         manifest.Entries.Add(Asset);
     }
 }

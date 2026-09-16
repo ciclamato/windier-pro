@@ -24,7 +24,9 @@
         <TextBlock x:Name="ProjectStatus" Text="UNTITLED PROJECT" Foreground="{StaticResource FaintBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
         <Button Content="Open" Click="OpenProject_Click" />
         <Button Content="Save" Click="SaveProject_Click" />
+        <Button Content="Export" Click="Export_Click" />
         <Button Content="Audio" Click="ConfigureAudio_Click" />
+        <Button x:Name="PlayPauseButton" Content="Play" Click="PlayPause_Click" />
         <Button Content="Split" Click="SplitSelected_Click" />
         <Button Content="Undo" Click="Undo_Click">
           <Button.KeyboardAccelerators><KeyboardAccelerator Key="Z" Modifiers="Control" /></Button.KeyboardAccelerators>
@@ -83,16 +85,40 @@
       </Border>
 
       <Border Grid.Column="4" Background="#DFF9F8F3" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="12" Padding="14">
-        <StackPanel>
+          <StackPanel x:Name="InspectorPanel">
           <TextBlock Text="INSPECTOR" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
-          <TextBlock Text="A little room to think" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Margin="0,3,0,0" />
-          <TextBlock Text="Select a clip to reveal its controls." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,20" />
+          <TextBlock x:Name="InspectorTitle" Text="Clip controls" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Margin="0,3,0,0" />
+          <TextBlock x:Name="InspectorSubtitle" Text="Select a clip to edit its timing and mix." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,6,0,14" />
+          <Grid x:Name="InspectorControls" Visibility="Collapsed" Margin="0,0,0,14">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="88" /></Grid.ColumnDefinitions>
+            <TextBlock Grid.Row="0" Text="Opacity" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,8,7" />
+            <NumberBox x:Name="OpacityInput" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="1" SmallChange="0.05" SpinButtonPlacementMode="Compact" Margin="0,0,0,7" />
+            <TextBlock Grid.Row="1" Text="Volume" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,8,7" />
+            <NumberBox x:Name="VolumeInput" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="4" SmallChange="0.1" SpinButtonPlacementMode="Compact" Margin="0,0,0,7" />
+            <TextBlock Grid.Row="2" Text="Speed" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,8,7" />
+            <NumberBox x:Name="SpeedInput" Grid.Row="2" Grid.Column="1" Minimum="0.05" Maximum="16" SmallChange="0.25" SpinButtonPlacementMode="Compact" Margin="0,0,0,7" />
+            <TextBlock Grid.Row="3" Text="Duration (frames)" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <NumberBox x:Name="DurationInput" Grid.Row="3" Grid.Column="1" Minimum="1" Maximum="1000000" SmallChange="1" SpinButtonPlacementMode="Compact" />
+          </Grid>
+          <StackPanel x:Name="InspectorActions" Visibility="Collapsed" Orientation="Horizontal" Spacing="7" Margin="0,0,0,14">
+            <Button Content="Apply" Click="ApplyInspector_Click" />
+            <Button Content="Ripple delete" Click="RippleDelete_Click" />
+          </StackPanel>
           <Border Background="{StaticResource VioletWashBrush}" CornerRadius="8" Padding="12">
             <StackPanel>
               <TextBlock Text="AI / AGENT" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource VioletBrush}" />
               <TextBlock Text="Describe a change" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Margin="0,4,0,0" />
-              <TextBlock Text="Connect Codex or another provider when you are ready." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12" />
-              <Button Content="Connect agent" Click="ConnectAgent_Click" Background="{StaticResource SurfaceElevatedBrush}" />
+              <TextBlock Text="Use a connected provider to turn an instruction into an undoable edit." TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,12" />
+              <StackPanel Orientation="Horizontal" Spacing="7">
+                <Button Content="Connect agent" Click="ConnectAgent_Click" Background="{StaticResource SurfaceElevatedBrush}" />
+                <Button Content="Add marker" Click="AddMarker_Click" Background="{StaticResource SurfaceElevatedBrush}" />
+              </StackPanel>
             </StackPanel>
           </Border>
         </StackPanel>
@@ -105,9 +131,10 @@
           <TextBlock Text="TIMELINE" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
           <TextBlock x:Name="TimelineReadout" Text="  /  00:00:00:00" FontSize="10" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" />
           <TextBlock x:Name="TimelineFps" Text="  /  30 FPS" FontSize="10" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" />
+          <TextBlock Text="  /  click empty timeline to seek · drag edges to trim" FontSize="10" Foreground="{StaticResource FaintBrush}" Margin="12,0,0,0" />
         </StackPanel>
         <ScrollViewer x:Name="TimelineScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled">
-          <Canvas x:Name="TimelineCanvas" Background="#22FDFCF8" />
+          <Canvas x:Name="TimelineCanvas" Background="#22FDFCF8" PointerPressed="TimelineCanvas_PointerPressed" />
         </ScrollViewer>
       </StackPanel>
     </Border>
